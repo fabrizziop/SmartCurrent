@@ -8,7 +8,15 @@ import base64
 import numpy as np
 import datetime
 import time
+import gc
 graph_location = "/home/YOUR_USER/iot_main/http/"
+
+INTEGRATE_PARAMETER = 0.01
+HIGH_DET = 1.15
+LOW_DET = 0.85
+DATE_ROLLOVER = 1800
+
+DATE_ROLLOVER_LAST = 180
 
 def get_names_to_read():
 	f = open("cwrite","r")
@@ -26,13 +34,31 @@ def get_all_data(file_name_list):
 	dates = []
 	currents = []
 	for file_name in file_name_list:
-		a = open(file_name,"r")
-		for line in a:
-			tline = line.split(",")
-			dates.append(tline[0])
-			currents.append(tline[3])
-			#print(tline[0],tline[3])
-		a.close()
+		date_cons = 0
+		avg_cons = 0
+		current_average = 0
+		start_date = 0
+		init_line = True
+		if file_name == file_name_list[-1]:
+			cur_rollover = DATE_ROLLOVER_LAST
+		else:
+			cur_rollover = DATE_ROLLOVER
+		with open(file_name,"r") as a:
+			for line in a:
+				tline = line.split(",")
+				cur_date = int(tline[0])
+				cur_current = float(tline[3])
+				if init_line or cur_date >= start_date + cur_rollover or not (current_average*LOW_DET <= cur_current <= current_average*HIGH_DET):
+					if cur_date >= start_date + cur_rollover:
+						date_cons += 1
+					elif not (current_average*LOW_DET <= cur_current <= current_average*HIGH_DET):
+						avg_cons += 1
+					dates.append(cur_date)
+					currents.append(cur_current)
+					current_average = cur_current
+					start_date = cur_date
+					init_line = False
+				current_average += (cur_current - current_average)*INTEGRATE_PARAMETER
 	return dates, currents
 
 
@@ -104,6 +130,7 @@ def generate_plots_and_data():
 	plt.savefig(graph_location+"recent04.jpg", dpi=400)
 	
 	plt.clf()
+	plt.close('all')
 
 	current_average_3600 = 0
 	for current_indiv in currents[-3600:]:
@@ -153,4 +180,5 @@ def generate_html(all_data):
 while True:
 	spit_data = generate_plots_and_data()
 	generate_html(spit_data)
+	gc.collect()
 	time.sleep(540)
